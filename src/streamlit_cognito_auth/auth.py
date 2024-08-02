@@ -183,6 +183,7 @@ class CognitoAuthCookieManager(CognitoAuthCookieManagerBase):
             )
         self.cookie_manager = stx.CookieManager()
 
+
     def set_credentials(self, credentials: Credentials) -> None:
         self.cookie_manager.set("id_token", credentials.id_token, key="set_id_token")
         self.cookie_manager.set("access_token", credentials.access_token, key="set_access_token")
@@ -190,13 +191,27 @@ class CognitoAuthCookieManager(CognitoAuthCookieManagerBase):
         self.cookie_manager.set("expires_in", credentials.expires_in, key="set_expires_in")
         self.cookie_manager.set("token_type", credentials.token_type, key="set_token_type")
 
+
     def load_credentials(self) -> Optional[Credentials]:
-        cookies = self.cookie_manager.get_all("load_credentials_get_all")
-        time.sleep(0.3)
-        try:
-            return Credentials(**cookies)
-        except ValidationError:
-            return None
+        start_time = time.time()
+        max_wait_time = 0.3  # Maximum wait time in seconds
+        retry_interval = 0.01  # 10 milliseconds between retries
+        attempt = 0
+
+        while time.time() - start_time < max_wait_time:
+            attempt += 1
+            key = f"load_credentials_get_all_{attempt}"
+            cookies = self.cookie_manager.get_all(key=key)
+            if cookies:
+                try:
+                    return Credentials(**cookies)
+                except ValidationError:
+                    logger.warning("Invalid credentials format in cookies")
+                    return None
+            time.sleep(retry_interval)
+
+        logger.warning(f"Failed to load credentials from cookies within {max_wait_time} seconds")
+        return None
 
     def reset_credentials(self) -> None:
         def delete_cookie(name: str) -> None:
